@@ -1,0 +1,428 @@
+#include <iostream>
+#include <cstdlib>
+#include <ctime>
+#include <fstream>
+#include <sstream>
+
+using namespace std;
+
+class Configuracion {
+private:
+    int numJugadores;
+    int valorParaGanar;
+    string palos[10];
+    int cantidadPalos;
+    string nombresJugadores[20];
+    int cantidadNombres;
+
+public:
+    Configuracion() {
+        numJugadores = 1;
+        valorParaGanar = 21;
+        cantidadPalos = 0;
+        cantidadNombres = 0;
+    }
+
+    bool cargarConfiguracion(const string& nombreArchivo) {
+        ifstream archivo(nombreArchivo);
+        if (!archivo.is_open()) {
+            cout << "No se encontro '" << nombreArchivo << "'. Usando valores por defecto.\n";
+            palos[0] = "Corazones";
+            palos[1] = "Rombos";
+            palos[2] = "Espadas";
+            palos[3] = "Treboles";
+            cantidadPalos = 4;
+            nombresJugadores[0] = "Jugador";
+            cantidadNombres = 1;
+            return false;
+        }
+
+        string linea;
+
+        if (getline(archivo, linea)) {
+            stringstream ss(linea);
+            string palo;
+            while (getline(ss, palo, ',') && cantidadPalos < 10) {
+                palo.erase(0, palo.find_first_not_of(" \t"));
+                palo.erase(palo.find_last_not_of(" \t") + 1);
+                if (!palo.empty()) {
+                    palos[cantidadPalos++] = palo;
+                }
+            }
+        }
+
+        if (getline(archivo, linea)) {
+            try {
+                numJugadores = stoi(linea);
+            } catch (...) {
+                numJugadores = 1;
+            }
+        }
+
+        if (getline(archivo, linea)) {
+            try {
+                valorParaGanar = stoi(linea);
+            } catch (...) {
+                valorParaGanar = 21;
+            }
+        }
+
+        while (getline(archivo, linea) && cantidadNombres < 20) {
+            if (!linea.empty()) {
+                size_t pos = linea.find(':');
+                string nombre = (pos != string::npos) ? linea.substr(pos + 1) : linea;
+
+                nombre.erase(0, nombre.find_first_not_of(" \t"));
+                nombre.erase(nombre.find_last_not_of(" \t") + 1);
+
+                if (!nombre.empty()) {
+                    nombresJugadores[cantidadNombres++] = nombre;
+                }
+            }
+        }
+
+        while (cantidadNombres < numJugadores && cantidadNombres < 20) {
+            nombresJugadores[cantidadNombres] = "Jugador " + to_string(cantidadNombres + 1);
+            cantidadNombres++;
+        }
+
+        archivo.close();
+        return true;
+    }
+
+    int getNumJugadores() const { return numJugadores; }
+    int getValorParaGanar() const { return valorParaGanar; }
+
+    string getPalo(int i) const { return palos[i]; }
+    int getCantidadPalos() const { return cantidadPalos; }
+
+    string getNombreJugador(int i) const { return nombresJugadores[i]; }
+};
+
+class Carta {
+private:
+    string numero;
+    string simbolo;
+    int valor;
+
+public:
+    Carta() {
+        numero = "";
+        simbolo = "";
+        valor = 0;
+    }
+
+    Carta(string num, string simb, int val) {
+        valor = val;
+        numero = num;
+        simbolo = simb;
+    }
+
+    int getValor() const {
+        return valor;
+    }
+
+    string getNumero() const { return numero; }
+    string getSimbolo() const { return simbolo; }
+
+    void mostrar() const {
+        cout << numero << " de " << simbolo;
+    }
+};
+
+class Baraja {
+private:
+    Carta cartas[52];
+    int tope;
+public:
+    Baraja() {
+        tope = 0;
+    }
+
+    void inicializarBaraja(const Configuracion& config) {
+        string numeros[] = {"2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "As"};
+        int valores[] = {2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10, 11};
+
+        int totalPalos = config.getCantidadPalos();
+        int contador = 0;
+
+        for (int s = 0; s < totalPalos; s++) {
+            for (int n = 0; n < 13; n++) {
+                if (contador < 52) {
+                    cartas[contador] = Carta(numeros[n], config.getPalo(s), valores[n]);
+                    contador++;
+                }
+            }
+        }
+        tope = 0;
+    }
+
+    int getTope() const { return tope; }
+    void setTope(int t) { tope = t; }
+
+    void barajar() {
+        srand(time(0));
+        for (int i = 0; i < 52; i++) {
+            int r = rand() % 52;
+            Carta temp = cartas[i];
+            cartas[i] = cartas[r];
+            cartas[r] = temp;
+        }
+        tope = 0;
+    }
+
+    Carta repartirCarta() {
+        if (tope < 52) {
+            return cartas[tope++];
+        }
+        barajar();
+        return cartas[tope++];
+    }
+};
+
+class Mano {
+private:
+    Carta cartasEnMano[12];
+    int cantidadCartas;
+
+public:
+    Mano() {
+        cantidadCartas = 0;
+    }
+
+    int getCantidadCartas() const { return cantidadCartas; }
+    Carta getCarta(int i) const { return cartasEnMano[i]; }
+
+    void agregarCarta(Carta c) {
+        if (cantidadCartas < 12) {
+            cartasEnMano[cantidadCartas++] = c;
+        }
+    }
+
+    void limpiar() {
+        cantidadCartas = 0;
+    }
+
+    int calcularPuntaje() const {
+        int total = 0;
+        int ases = 0;
+
+        for (int i = 0; i < cantidadCartas; i++) {
+            total += cartasEnMano[i].getValor();
+            if (cartasEnMano[i].getValor() == 11) {
+                ases++;
+            }
+        }
+
+        while (total > 21 && ases > 0) {
+            total -= 10;
+            ases--;
+        }
+
+        return total;
+    }
+
+    void mostrarMano(bool ocultarPrimera = false) const {
+        for (int i = 0; i < cantidadCartas; i++) {
+            if (i == 0 && ocultarPrimera) {
+                cout << "(Carta Oculta)";
+            } else {
+                cartasEnMano[i].mostrar();
+            }
+            if (i < cantidadCartas - 1) cout << ", ";
+        }
+    }
+};
+
+class Participante {
+private:
+    string nombre;
+    Mano mano;
+
+public:
+    Participante() { nombre = "Jugador"; }
+    Participante(string nom) {
+        nombre = nom;
+    }
+
+    string getNombre() const { return nombre; }
+    void setNombre(string nom) { nombre = nom; }
+
+    Mano& getManoRef() { return mano; }
+
+    void recibirCarta(Carta c) {
+        mano.agregarCarta(c);
+    }
+
+    int getPuntaje() const {
+        return mano.calcularPuntaje();
+    }
+
+    void limpiarMano() {
+        mano.limpiar();
+    }
+
+    void mostrarMano(bool ocultarPrimera = false) const {
+        mano.mostrarMano(ocultarPrimera);
+    }
+};
+
+class Juego {
+private:
+    Configuracion config;
+    Baraja baraja;
+    Participante jugadores[10];
+    int totalJugadoresActivos;
+    Participante repartidor;
+    int victorias;
+    int derrotas;
+    int empates;
+
+public:
+    Juego() : repartidor("Repartidor") {
+        victorias = 0;
+        derrotas = 0;
+        empates = 0;
+        totalJugadoresActivos = 0;
+    }
+
+    void iniciar() {
+        config.cargarConfiguracion("setup.txt");
+
+        baraja.inicializarBaraja(config);
+
+        totalJugadoresActivos = config.getNumJugadores();
+        if (totalJugadoresActivos > 10) totalJugadoresActivos = 10;
+
+        for (int i = 0; i < totalJugadoresActivos; i++) {
+            string nombreJugador = config.getNombreJugador(i);
+            jugadores[i] = Participante(nombreJugador);
+        }
+
+        int objetivoGanar = config.getValorParaGanar();
+
+        char opcion;
+        cout << "=== JUEGO DEL 21 CONFIGURABLE ===" << endl;
+        cout << "Puntaje para ganar: " << objetivoGanar << endl;
+        cout << "Total de jugadores: " << totalJugadoresActivos << endl;
+
+        do {
+            if (jugadores[0].getManoRef().getCantidadCartas() == 0) {
+                baraja.barajar();
+                repartidor.limpiarMano();
+                for (int i = 0; i < totalJugadoresActivos; i++) {
+                    jugadores[i].limpiarMano();
+                    jugadores[i].recibirCarta(baraja.repartirCarta());
+                    jugadores[i].recibirCarta(baraja.repartirCarta());
+                }
+                repartidor.recibirCarta(baraja.repartirCarta());
+                repartidor.recibirCarta(baraja.repartirCarta());
+            }
+
+            for (int i = 0; i < totalJugadoresActivos; i++) {
+                cout<<endl;
+                cout << "----------------------------------" << endl;
+                cout << "TURNO DE: " << jugadores[i].getNombre() << endl;
+                cout << "Cartas del Repartidor: ";
+                repartidor.mostrarMano(true);
+                cout << endl;
+
+                char decision;
+                bool sePaso = false;
+
+                while (jugadores[i].getPuntaje() < objetivoGanar) {
+                    cout << "Cartas de " << jugadores[i].getNombre() << ": ";
+                    jugadores[i].mostrarMano(false);
+                    cout << " (Suma: " << jugadores[i].getPuntaje() << ")\n";
+
+                    cout << "¿Deseas pedir carta (p) o quedarte (q)?: ";
+                    cin >> decision;
+
+                    if (decision == 'p' || decision == 'P') {
+                        jugadores[i].recibirCarta(baraja.repartirCarta());
+
+                        if (jugadores[i].getPuntaje() > objetivoGanar) {
+                            cout << "Cartas de " << jugadores[i].getNombre() << ": ";
+                            jugadores[i].mostrarMano(false);
+                            cout << " (Suma: " << jugadores[i].getPuntaje() << ")\n";
+                            cout << "¡Te pasaste de " << objetivoGanar << "! Pierdes esta ronda." << endl;
+                            sePaso = true;
+                            derrotas++;
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
+                if (!sePaso) {
+                    cout << "Te quedas con un puntaje de: " << jugadores[i].getPuntaje() << endl;
+                }
+            }
+
+            cout << endl;
+            cout << "--- Turno del Repartidor ---" << endl;
+            cout << "Cartas del Repartidor: ";
+            repartidor.mostrarMano(false);
+            cout << " (Suma: " << repartidor.getPuntaje() << ")\n";
+
+            while (repartidor.getPuntaje() < (objetivoGanar - 4)) {
+                cout << "El repartidor pide carta..." << endl;
+                repartidor.recibirCarta(baraja.repartirCarta());
+                cout << "Cartas del Repartidor: ";
+                repartidor.mostrarMano(false);
+                cout << " (Suma: " << repartidor.getPuntaje() << ")\n";
+            }
+
+            int ptsRepartidor = repartidor.getPuntaje();
+
+            cout << endl;
+            cout << "--- RESULTADOS FINALES DE LA RONDA ---" << endl;
+            for (int i = 0; i < totalJugadoresActivos; i++) {
+                int ptsJugador = jugadores[i].getPuntaje();
+                cout << "-> " << jugadores[i].getNombre() << " (Puntaje: " << ptsJugador << "): ";
+
+                if (ptsJugador > objetivoGanar) {
+                    cout << "Eliminado por pasarse." << endl;
+                } else if (ptsRepartidor > objetivoGanar) {
+                    cout << "¡El repartidor se pasó! ¡Ganaste!" << endl;
+                    victorias++;
+                } else if (ptsJugador > ptsRepartidor) {
+                    cout << "¡Ganaste al repartidor!" << endl;
+                    victorias++;
+                } else if (ptsJugador < ptsRepartidor) {
+                    cout << "Perdiste ante el repartidor." << endl;
+                    derrotas++;
+                } else {
+                    cout << "¡Empate con el repartidor!" << endl;
+                    empates++;
+                }
+            }
+
+            for (int i = 0; i < totalJugadoresActivos; i++) {
+                jugadores[i].limpiarMano();
+            }
+            repartidor.limpiarMano();
+
+            cout << endl;
+            cout << "MARCADOR GLOBAL - Victorias: " << victorias
+                 << " | Derrotas: " << derrotas
+                 << " | Empates: " << empates << endl;
+
+            cout << endl;
+            cout << "¿Deseas jugar otra ronda? (s/n): ";
+            cin >> opcion;
+
+        } while (opcion == 's' || opcion == 'S');
+
+        cout << endl;
+        cout << "¡Gracias por jugar! Marcador final -> Victorias: " << victorias
+             << " | Derrotas: " << derrotas << " | Empates: " << empates << endl;
+    }
+};
+
+int main() {
+    Juego juego;
+    juego.iniciar();
+    return 0;
+}
