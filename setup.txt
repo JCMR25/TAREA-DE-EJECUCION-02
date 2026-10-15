@@ -1,0 +1,6 @@
+negros, rojos, verdes, azules
+3
+21
+Jugador 1: CARLOS
+Jugador 2: EYMI
+Jugador 3: PAOLO
